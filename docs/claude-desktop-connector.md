@@ -1,5 +1,20 @@
 # Claude Desktop / claude.ai Custom Connector
 
+## Fastest path: the .mcpb bundle (one-click, local)
+
+Every release ships an `odoo-mcp-<version>.mcpb` asset on the
+[GitHub releases page](https://github.com/tuanle96/mcp-odoo/releases).
+Double-click it (or drag it into Claude Desktop → Settings → Extensions),
+fill in your Odoo URL, database, username, and API key in the dialog, and
+you're done — no JSON editing, no terminal. The bundle launches the server
+via [uv](https://docs.astral.sh/uv/), so `uv` must be installed
+(`brew install uv` on macOS). Credentials marked sensitive are stored by the
+OS keychain, not in a config file.
+
+Prefer manual configuration, or connecting to a *remote* server? Read on.
+
+---
+
 This guide explains how to expose `odoo-mcp` as a remote MCP server and connect
 it to Claude Desktop or claude.ai as a custom connector. It uses the Streamable
 HTTP transport and the OAuth 2.1 resource-server mode that ship in `odoo-mcp`

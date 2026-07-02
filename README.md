@@ -3,7 +3,8 @@
 <!-- mcp-name: io.github.tuanle96/mcp-odoo -->
 
 <p align="center">
-  <strong>The Odoo MCP that is fluent in every Odoo version.</strong><br>
+  <strong>The free AI layer for Odoo — any edition, any version.</strong><br>
+  Odoo's built-in AI is Enterprise-only. Odoo MCP gives Community and Enterprise 16+ the same power for $0 with the LLM you already use (Claude, GPT, Gemini, DeepSeek, Ollama).<br>
   Five-minute install. Zero Odoo-side setup. Safe writes, real diagnostics, JSON-2 ready years before the Odoo 22 XML-RPC removal.
 </p>
 

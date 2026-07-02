@@ -1,0 +1,63 @@
+{
+  "manifest_version": "0.2",
+  "name": "odoo-mcp",
+  "display_name": "Odoo MCP",
+  "version": "__VERSION__",
+  "description": "Talk to any Odoo 16+ database with zero Odoo-side setup. Requires uv (https://docs.astral.sh/uv/).",
+  "long_description": "Odoo MCP turns any Odoo 16+ database into a Model Context Protocol server using only your existing credentials — no App Store module, no admin access. 39 tools: bounded reads, server-side aggregation, schema discovery, diagnostics, migration helpers, local BM25 knowledge search, accounting reports, and a gated write workflow with approval tokens and an audit trail. Speaks XML-RPC for Odoo 16-18 and External JSON-2 for Odoo 19+.",
+  "author": {
+    "name": "Lê Anh Tuấn",
+    "email": "justin.le.1105@gmail.com",
+    "url": "https://github.com/tuanle96"
+  },
+  "homepage": "https://tuanle96.github.io/mcp-odoo/",
+  "documentation": "https://github.com/tuanle96/mcp-odoo#readme",
+  "support": "https://github.com/tuanle96/mcp-odoo/issues",
+  "license": "MIT",
+  "keywords": ["odoo", "erp", "accounting", "inventory", "crm", "json-2", "xml-rpc"],
+  "server": {
+    "type": "python",
+    "entry_point": "",
+    "mcp_config": {
+      "command": "uvx",
+      "args": ["odoo-mcp==__VERSION__"],
+      "env": {
+        "ODOO_URL": "${user_config.odoo_url}",
+        "ODOO_DB": "${user_config.odoo_db}",
+        "ODOO_USERNAME": "${user_config.odoo_username}",
+        "ODOO_PASSWORD": "${user_config.odoo_password}"
+      }
+    }
+  },
+  "user_config": {
+    "odoo_url": {
+      "type": "string",
+      "title": "Odoo URL",
+      "description": "Full URL of your Odoo server, e.g. https://mycompany.odoo.com",
+      "required": true
+    },
+    "odoo_db": {
+      "type": "string",
+      "title": "Database name",
+      "description": "The Odoo database to connect to",
+      "required": true
+    },
+    "odoo_username": {
+      "type": "string",
+      "title": "Username",
+      "description": "Your Odoo login (usually an email address)",
+      "required": true
+    },
+    "odoo_password": {
+      "type": "string",
+      "title": "API key or password",
+      "description": "An Odoo API key (Settings → My Profile → Account Security) is safer than a password",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": { "python": ">=3.10" }
+  }
+}
