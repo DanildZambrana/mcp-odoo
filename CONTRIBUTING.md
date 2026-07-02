@@ -2,6 +2,8 @@
 
 Thanks for helping make Odoo MCP better. The best contributions are small, tested, and clear about the Odoo version and transport they affect.
 
+Adding or changing an MCP tool? Read [docs/adding-a-tool.md](docs/adding-a-tool.md) first — it walks through the layering contracts, the registration ritual, and the test conventions. Looking for a starter task? See the [good first issue label](https://github.com/tuanle96/mcp-odoo/labels/good%20first%20issue).
+
 ## Development setup
 
 ```bash
