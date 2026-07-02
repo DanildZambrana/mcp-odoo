@@ -16,6 +16,7 @@
   <a href="https://github.com/tuanle96/mcp-odoo/actions/workflows/publish.yml"><img alt="CI" src="https://github.com/tuanle96/mcp-odoo/actions/workflows/publish.yml/badge.svg"></a>
   <a href="https://github.com/tuanle96/mcp-odoo/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/tuanle96/mcp-odoo?style=flat"></a>
   <a href="https://github.com/tuanle96/mcp-odoo/network/members"><img alt="Forks" src="https://img.shields.io/github/forks/tuanle96/mcp-odoo?style=flat"></a>
+  <a href="https://skills.sh/tuanle96/mcp-odoo"><img alt="Agent Skills" src="https://skills.sh/b/tuanle96/mcp-odoo"></a>
 </p>
 
 Odoo MCP turns any Odoo 16+ database into a Model Context Protocol server — using only your existing credentials. **No App Store module, no permission setup, no admin access required.** Built for local agents, IDEs, and automation tools that need real Odoo context without hand-rolled scripts or unsafe direct write access.

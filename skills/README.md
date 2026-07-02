@@ -1,5 +1,7 @@
 # Agent Skills for odoo-mcp
 
+[![skills.sh](https://skills.sh/b/tuanle96/mcp-odoo)](https://skills.sh/tuanle96/mcp-odoo)
+
 Business-workflow playbooks that pair with the odoo-mcp server — the
 [MCP + Skills hybrid](https://github.com/tuanle96/mcp-odoo#readme): MCP
 provides the safe tool layer (gated writes, field ACL, bounded reads),
