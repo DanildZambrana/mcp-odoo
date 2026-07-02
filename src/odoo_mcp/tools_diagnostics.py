@@ -28,6 +28,7 @@ from .agent_tools import (
     scan_addons_source_report,
 )
 from .diagnostics import (
+    analyze_upgrade_log_report,
     classify_access_error,
     diagnose_odoo_call_report,
     generate_json2_payload_report,
@@ -491,6 +492,36 @@ def upgrade_risk_report(
             }
         )
     return report
+
+
+@mcp.tool(
+    description=(
+        "Classify Odoo install/update log errors into a migration worklist "
+        "(no_action / needs_review / needs_script) with fix suggestions"
+    ),
+    annotations=PREVIEW_TOOL,
+    structured_output=True,
+)
+def analyze_upgrade_log(
+    log_text: str,
+    source_version: Optional[str] = None,
+    target_version: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Parse an Odoo install/update/upgrade log and classify known failure
+    patterns (xpath breaks, missing fields/models/external ids, NOT NULL
+    violations, dependency errors, attrs removal, ORM signature changes)
+    into an actionable worklist. Input-driven — never contacts Odoo. Paste
+    the relevant log slice (up to ~1 MB); findings are deduplicated.
+    """
+    try:
+        return analyze_upgrade_log_report(
+            log_text,
+            source_version=source_version,
+            target_version=target_version,
+        )
+    except Exception as e:
+        return {"success": False, "tool": "analyze_upgrade_log", "error": str(e)}
 
 
 @mcp.tool(

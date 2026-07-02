@@ -32,9 +32,11 @@ from .tools_cross_instance import (
     run_aggregate_across,
     run_search_across,
 )
+from .data_quality import build_data_quality_report
 from .tools_knowledge import MAX_INDEX_FETCH, fetch_and_index
 
 ASYNC_OPERATIONS = (
+    "data_quality_report",
     "scan_addons_source",
     "index_knowledge",
     "receivable_payable_aging",
@@ -86,6 +88,29 @@ def _build_index_knowledge_job(
     def job() -> Dict[str, Any]:
         return fetch_and_index(
             odoo, instance_name, model, domain, fields, limit, replace
+        )
+
+    return job
+
+
+def _build_data_quality_job(
+    ctx: Context, instance: Optional[str], params: Dict[str, Any]
+) -> Callable[[], Dict[str, Any]]:
+    model = str(params.get("model", ""))
+    validate_model_name(model)
+    checks = params.get("checks")
+    key_fields = params.get("key_fields")
+    sample_limit = clamp_limit(int(params.get("sample_limit", 500)), maximum=2000)
+    instance_name, odoo = _resolve_odoo(ctx, instance)
+
+    def job() -> Dict[str, Any]:
+        return build_data_quality_report(
+            odoo,
+            instance_name,
+            model,
+            checks=checks,
+            key_fields=key_fields,
+            sample_limit=sample_limit,
         )
 
     return job
@@ -149,6 +174,8 @@ def submit_async_task(
         params = params or {}
         if operation == "scan_addons_source":
             job = _build_scan_addons_job(params)
+        elif operation == "data_quality_report":
+            job = _build_data_quality_job(ctx, instance, params)
         elif operation == "index_knowledge":
             job = _build_index_knowledge_job(ctx, instance, params)
         elif operation == "receivable_payable_aging":

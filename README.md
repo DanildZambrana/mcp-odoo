@@ -36,10 +36,10 @@ Once configured (see [Setup](#setup)), ask your agent things like:
 
 | Capability | What it gives you |
 | --- | --- |
-| 39 MCP tools | Read records and attachments, aggregate server-side, post chatter, inspect schema, build domains, scan addons, diagnose calls, access rules, resolve model renames, validate writes, and fan out across instances. |
+| 41 MCP tools | Read records and attachments, aggregate server-side, post chatter, inspect schema, build domains, scan addons, diagnose calls and upgrade logs, check data quality, access rules, resolve model renames, validate writes, and fan out across instances. |
 | Field-level ACL | Opt-in per-instance, per-model field allow/deny enforced on every read path (records, aggregates, knowledge index, resources). First open-source Odoo MCP with it. See [docs/field-acl.md](docs/field-acl.md). |
 | Cross-instance queries | Read-only fan-out across many client DBs with merged, attributed, partial-failure-tolerant results — no warehouse, no sync. See [docs/partner-playbook.md](docs/partner-playbook.md). |
-| Workflow prompts | 10 prompts including 5 end-to-end business workflows (invoice approval, PO match, onboarding, expense review, month-end close) that route writes through the gate. |
+| Workflow prompts | 11 prompts including 6 end-to-end business workflows (invoice approval, PO match, onboarding, expense review, month-end close, pre-migration data quality) that route writes through the gate. |
 | Background tasks | `submit_async_task` runs long read operations (addon scans, knowledge indexing, AR/AP aging) on a bounded worker pool; poll with `get_async_task` while the agent keeps reasoning. |
 | Local-first knowledge search | `index_knowledge` + `search_knowledge` give BM25 relevance ranking over a bounded record slice — accent-insensitive, in-process, no embeddings service, no data leaving the machine. |
 | Accounting pack | `receivable_payable_aging` and `accounting_health_summary` answer the most common finance questions in one call instead of hand-built domains. |
@@ -323,7 +323,7 @@ odoo-mcp --health
 
 ## MCP Tools
 
-39 tools grouped by use case. Each tool name is a single-purpose handle the agent can call. Tools that talk to Odoo accept an optional `instance` parameter when multiple instances are configured (see [Multiple Odoo instances](#multiple-odoo-instances)).
+41 tools grouped by use case. Each tool name is a single-purpose handle the agent can call. Tools that talk to Odoo accept an optional `instance` parameter when multiple instances are configured (see [Multiple Odoo instances](#multiple-odoo-instances)).
 
 ### Read & Discover (11)
 
@@ -427,7 +427,7 @@ One question across many configured instances, merged and attributed. See the [p
 
 ## Prompts
 
-10 prompts: 5 diagnostic, plus 5 operational **workflow** prompts that encode end-to-end business processes and route every write through the approval gate.
+11 prompts: 5 diagnostic, plus 6 operational **workflow** prompts that encode end-to-end business processes and route every write through the approval gate.
 
 | Prompt | Use it for |
 | --- | --- |

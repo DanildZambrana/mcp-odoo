@@ -40,10 +40,10 @@ def _prompt_texts():
     return texts
 
 
-def test_prompt_registry_has_ten():
+def test_prompt_registry_has_eleven():
     names = {p.name for p in asyncio.run(server.mcp.list_prompts())}
     assert WORKFLOW_PROMPTS <= names
-    assert len(names) == 10
+    assert len(names) == 11
 
 
 def test_workflow_prompts_name_their_tools():

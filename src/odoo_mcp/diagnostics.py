@@ -701,6 +701,7 @@ def upgrade_risk_report(
         sanitize_odoo_error(error, include_debug=include_debug)
         for error in observed_errors or []
     ]
+    action_summary = annotate_finding_actions(risks)
     risk = _max_risk(risks)
     return {
         "success": True,
@@ -710,6 +711,7 @@ def upgrade_risk_report(
         "summary": {
             "risk": risk,
             "blocked": any(r["severity"] == "error" for r in risks),
+            "actions": action_summary,
         },
         "risks": risks,
         "transport": {
@@ -938,3 +940,246 @@ def _classification_counts(items: list[dict[str, Any]]) -> dict[str, int]:
         classification = str(item.get("classification", "unknown"))
         counts[classification] = counts.get(classification, 0) + 1
     return counts
+
+
+# ---------------------------------------------------------------------------
+# Migration workbench: action taxonomy + upgrade-log analysis
+# ---------------------------------------------------------------------------
+
+# OpenUpgrade-style worklist buckets: what a human must do about a finding.
+ACTION_NO_ACTION = "no_action"
+ACTION_NEEDS_REVIEW = "needs_review"
+ACTION_NEEDS_SCRIPT = "needs_script"
+
+# Findings whose code implies a specific action regardless of severity.
+_ACTION_OVERRIDES: dict[str, str] = {
+    # Source code must change for the target version.
+    "crud_override_missing_super": ACTION_NEEDS_SCRIPT,
+    "crud_override_super_not_returned": ACTION_NEEDS_SCRIPT,
+    "computed_method_missing": ACTION_NEEDS_SCRIPT,
+    "computed_method_missing_depends": ACTION_NEEDS_SCRIPT,
+    "computed_depends_missing_fields": ACTION_NEEDS_SCRIPT,
+    "xmlrpc_jsonrpc_removal": ACTION_NEEDS_SCRIPT,
+    "deprecated_rpc_transport": ACTION_NEEDS_REVIEW,
+    # Human judgment, not necessarily code.
+    "sudo_usage": ACTION_NEEDS_REVIEW,
+    "destructive_operation": ACTION_NEEDS_REVIEW,
+    "destructive_method": ACTION_NEEDS_REVIEW,
+    "destructive_method_review": ACTION_NEEDS_REVIEW,
+    "automated_action": ACTION_NEEDS_REVIEW,
+    "custom_module_upgrade": ACTION_NEEDS_REVIEW,
+    "security_rule_file": ACTION_NEEDS_REVIEW,
+    # Inventory/informational.
+    "custom_model_class": ACTION_NO_ACTION,
+    "custom_method": ACTION_NO_ACTION,
+    "custom_view": ACTION_NO_ACTION,
+    "non_installable_module": ACTION_NO_ACTION,
+}
+
+
+def classify_finding_action(code: str, severity: str) -> str:
+    """Map a finding to the worklist action a consultant should take."""
+    override = _ACTION_OVERRIDES.get(str(code))
+    if override:
+        return override
+    severity_normalized = str(severity).lower()
+    if severity_normalized == "error":
+        return ACTION_NEEDS_SCRIPT
+    if severity_normalized == "warning":
+        return ACTION_NEEDS_REVIEW
+    return ACTION_NO_ACTION
+
+
+def annotate_finding_actions(
+    findings: list[dict[str, Any]],
+) -> dict[str, int]:
+    """Attach an ``action`` to each finding; return the worklist summary."""
+    summary = {
+        ACTION_NO_ACTION: 0,
+        ACTION_NEEDS_REVIEW: 0,
+        ACTION_NEEDS_SCRIPT: 0,
+    }
+    for finding in findings:
+        action = classify_finding_action(
+            str(finding.get("code", "")), str(finding.get("severity", "info"))
+        )
+        finding["action"] = action
+        summary[action] += 1
+    return summary
+
+
+MAX_LOG_BYTES = 1_000_000
+MAX_LOG_FINDINGS = 200
+
+# (category, severity, action, regex, suggestion) — matched per line against
+# real Odoo install/update logs. Ordered: first match wins per line.
+_UPGRADE_LOG_PATTERNS: list[tuple[str, str, str, "re.Pattern[str]", str]] = [
+    (
+        "view_xpath_not_found",
+        "error",
+        ACTION_NEEDS_SCRIPT,
+        re.compile(r"cannot be located in parent view|Element .{0,120}cannot be located"),
+        "An inherited view's xpath no longer matches the target-version parent "
+        "view; rewrite the inheritance (check the parent view's new structure).",
+    ),
+    (
+        "external_id_missing",
+        "error",
+        ACTION_NEEDS_SCRIPT,
+        re.compile(r"External ID not found in the system: ([\w.]+)"),
+        "A data file or view references an XML id that no longer exists in the "
+        "target version; update the reference or add a migration record.",
+    ),
+    (
+        "field_missing",
+        "error",
+        ACTION_NEEDS_SCRIPT,
+        re.compile(
+            r"Field [\"']?([\w.]+)[\"']? does not exist|Invalid field ([\w.]+) on model|"
+            r"KeyError: ['\"]([\w.]+)['\"].*fields"
+        ),
+        "A field referenced by code/views/data was renamed or removed; check "
+        "lookup_model_history and the target-version model definition.",
+    ),
+    (
+        "model_missing",
+        "error",
+        ACTION_NEEDS_SCRIPT,
+        re.compile(r"Model ['\"]?([\w.]+)['\"]? does not exist|Invalid model name"),
+        "A model was renamed or removed between versions; lookup_model_history "
+        "knows the well-known renames (e.g. account.invoice -> account.move).",
+    ),
+    (
+        "not_null_violation",
+        "error",
+        ACTION_NEEDS_SCRIPT,
+        re.compile(r"NotNullViolation|null value in column \"?(\w+)\"?"),
+        "The target schema enforces NOT NULL on a column with empty legacy "
+        "rows; fill the data pre-migration (data_quality_report finds these).",
+    ),
+    (
+        "schema_column_missing",
+        "error",
+        ACTION_NEEDS_SCRIPT,
+        re.compile(r"UndefinedColumn|column \"?[\w.]+\"? does not exist"),
+        "SQL references a column the target schema doesn't have; usually a "
+        "custom report/view or a stale stored computed field.",
+    ),
+    (
+        "module_dependency",
+        "error",
+        ACTION_NEEDS_SCRIPT,
+        re.compile(
+            r"Some modules are not loaded|Unmet dependencies|module .{0,60}: Unmet",
+        ),
+        "A module dependency is missing or was renamed in the target version; "
+        "fix the manifest depends list or install the dependency first.",
+    ),
+    (
+        "module_load_failed",
+        "error",
+        ACTION_NEEDS_SCRIPT,
+        re.compile(r"Failed to load registry|Failed to initialize database|couldn't load module"),
+        "Registry load aborted — fix the first error above it; later errors "
+        "are usually cascade noise.",
+    ),
+    (
+        "view_attrs_removed",
+        "error",
+        ACTION_NEEDS_SCRIPT,
+        re.compile(r"attrs.{0,40}(no longer|not supported|deprecated)|Since 17\.0.*attrs"),
+        "Odoo 17 removed attrs/states on views; convert to inline "
+        "invisible/readonly/required expressions.",
+    ),
+    (
+        "access_error",
+        "warning",
+        ACTION_NEEDS_REVIEW,
+        re.compile(r"AccessError|You are not allowed to (access|modify|create|delete)"),
+        "Access rules changed or the upgrade user lacks rights; diagnose_access "
+        "explains which ACL/record rule is responsible.",
+    ),
+    (
+        "api_signature_change",
+        "error",
+        ACTION_NEEDS_SCRIPT,
+        re.compile(r"TypeError: .{0,80}(create|write|search|browse)\(\)"),
+        "An ORM method signature changed between versions (e.g. create "
+        "vals_list); update the custom code to the target-version signature.",
+    ),
+    (
+        "deprecation",
+        "info",
+        ACTION_NEEDS_REVIEW,
+        re.compile(r"DeprecationWarning|deprecated", re.IGNORECASE),
+        "Deprecations survive the upgrade but break the one after; schedule "
+        "the cleanup.",
+    ),
+]
+
+
+def analyze_upgrade_log_report(
+    log_text: str,
+    source_version: str | None = None,
+    target_version: str | None = None,
+) -> dict[str, Any]:
+    """Classify Odoo install/update log lines into a migration worklist."""
+    if not isinstance(log_text, str) or not log_text.strip():
+        raise ValueError("log_text must be a non-empty string")
+    truncated = False
+    if len(log_text) > MAX_LOG_BYTES:
+        log_text = log_text[:MAX_LOG_BYTES]
+        truncated = True
+
+    findings: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for line_no, line in enumerate(log_text.splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        for category, severity, action, pattern, suggestion in _UPGRADE_LOG_PATTERNS:
+            if pattern.search(stripped):
+                evidence = stripped[:200]
+                key = (category, evidence)
+                if key in seen:
+                    break
+                seen.add(key)
+                findings.append(
+                    {
+                        "category": category,
+                        "severity": severity,
+                        "action": action,
+                        "line": line_no,
+                        "evidence": evidence,
+                        "suggestion": suggestion,
+                    }
+                )
+                break
+        if len(findings) >= MAX_LOG_FINDINGS:
+            break
+
+    by_category: dict[str, int] = {}
+    by_action = {
+        ACTION_NO_ACTION: 0,
+        ACTION_NEEDS_REVIEW: 0,
+        ACTION_NEEDS_SCRIPT: 0,
+    }
+    for finding in findings:
+        by_category[finding["category"]] = by_category.get(finding["category"], 0) + 1
+        by_action[finding["action"]] += 1
+
+    return {
+        "success": True,
+        "tool": "analyze_upgrade_log",
+        "source_version": source_version,
+        "target_version": target_version,
+        "summary": {
+            "finding_count": len(findings),
+            "by_category": by_category,
+            "by_action": by_action,
+            "clean": not findings,
+            "log_truncated": truncated,
+            "max_findings_reached": len(findings) >= MAX_LOG_FINDINGS,
+        },
+        "findings": findings,
+    }

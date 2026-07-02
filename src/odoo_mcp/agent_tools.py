@@ -542,6 +542,9 @@ def scan_addons_source_report(
                     }
                 )
 
+    from .diagnostics import annotate_finding_actions
+
+    action_summary = annotate_finding_actions(findings)
     return {
         "success": True,
         "tool": "scan_addons_source",
@@ -552,6 +555,7 @@ def scan_addons_source_report(
             "scanned_files": scanned_files,
             "skipped_files": skipped_files,
             "max_files_reached": scanned_files >= max_files,
+            "actions": action_summary,
         },
         "modules": modules,
         "source_findings": findings,

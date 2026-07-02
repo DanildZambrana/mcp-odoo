@@ -177,7 +177,13 @@ def test_upgrade_risk_report_flags_odoo22_rpc_removal_and_destructive_methods():
         methods=[{"model": "res.partner", "method": "write"}],
     )
 
-    assert report["summary"] == {"risk": "high", "blocked": True}
+    assert report["summary"]["risk"] == "high"
+    assert report["summary"]["blocked"] is True
+    assert set(report["summary"]["actions"]) == {
+        "no_action",
+        "needs_review",
+        "needs_script",
+    }
     assert report["transport"]["xmlrpc_jsonrpc_deprecation"] == "Odoo 22 fall 2028"
     assert report["destructive_methods"] == [
         {"model": "res.partner", "method": "write", "source": "input"}

@@ -63,6 +63,7 @@ from .agent_tools import (
 )
 
 # Import tool/prompt modules — side-effect: registers @mcp.tool / @mcp.prompt decorators
+from . import tools_data_quality
 from . import tools_diagnostics
 from . import tools_read
 from . import tools_write
@@ -104,7 +105,11 @@ from .tools_read import (
 )
 
 # Re-export diagnostics tool functions
+from .tools_data_quality import (
+    data_quality_report,
+)
 from .tools_diagnostics import (
+    analyze_upgrade_log,
     build_domain,
     business_pack_report,
     diagnose_access,
@@ -286,6 +291,8 @@ __all__ = [
     "lookup_model_history",
     "fit_gap_report",
     "scan_addons_source",
+    "data_quality_report",
+    "analyze_upgrade_log",
     "build_domain",
     "business_pack_report",
     # Knowledge tools

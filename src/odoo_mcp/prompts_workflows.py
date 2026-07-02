@@ -160,3 +160,48 @@ def prompt_accounting_close_checklist(period_end: str = "") -> str:
         "here — setting the lock date is a deliberate, separately confirmed gated "
         "write the human performs after review."
     )
+
+
+@mcp.prompt(
+    name="pre_migration_data_quality",
+    description="Data-quality gate before an Odoo version upgrade or big import",
+)
+def prompt_pre_migration_data_quality(
+    models: str = "res.partner, product.template, account.move",
+    target_version: str = "",
+) -> str:
+    """Checklist that runs the data-quality pack per model and routes every
+    remediation through the gated write workflow."""
+    model_list = [m.strip() for m in models.split(",") if m.strip()]
+    target = target_version.strip() or "the target version"
+    lines = [
+        "You are preparing an Odoo database for a migration to "
+        f"{target}. Dirty data is the top cause of failed upgrades and "
+        "confidently-wrong AI answers, so run this gate first.",
+        "",
+        "For EACH of these models: " + ", ".join(model_list) + ":",
+        "1. Call data_quality_report(model=<model>). For large databases run "
+        "it in the background via submit_async_task(operation="
+        '"data_quality_report", params={"model": <model>}) and poll '
+        "get_async_task.",
+        "2. Read summary.checks_with_issues. For every failing check, show "
+        "the evidence records (ids and values) to the human — never guess.",
+        "3. For orphaned_references, confirm with diagnose_access whether the "
+        "target is truly missing or just hidden by access rules before "
+        "proposing any change.",
+        "4. Propose remediation as a plan: which records to merge, fill, or "
+        "archive. Every actual change MUST go through preview_write → "
+        "validate_write → execute_approved_write — one record batch at a "
+        "time, with the human confirming each batch.",
+        "5. If the upgrade already produced logs, run analyze_upgrade_log on "
+        "them and merge its needs_script items into the plan.",
+        "",
+        "Deliverable: a per-model table (check, issue_count, action) plus a "
+        "remediation plan ordered by migration risk. State clearly when a "
+        "model is clean.",
+        "",
+        "Human checkpoints: approve the remediation plan before any write; "
+        "approve each write batch; sign off the final 'migration-ready' "
+        "verdict.",
+    ]
+    return "\n".join(lines)

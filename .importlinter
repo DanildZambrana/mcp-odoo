@@ -21,11 +21,13 @@ source_modules =
     odoo_mcp.audit
     odoo_mcp.auth
     odoo_mcp.schemas
+    odoo_mcp.data_quality
 forbidden_modules =
     odoo_mcp.server
     odoo_mcp.server_core
     odoo_mcp.tools_read
     odoo_mcp.tools_write
+    odoo_mcp.tools_data_quality
     odoo_mcp.tools_diagnostics
     odoo_mcp.tools_knowledge
     odoo_mcp.tools_accounting
@@ -40,7 +42,7 @@ type = layers
 layers =
     odoo_mcp.server
     odoo_mcp.tools_async
-    odoo_mcp.tools_read | odoo_mcp.tools_write | odoo_mcp.tools_diagnostics | odoo_mcp.tools_knowledge | odoo_mcp.tools_accounting | odoo_mcp.tools_cross_instance | odoo_mcp.prompts | odoo_mcp.prompts_workflows
+    odoo_mcp.tools_read | odoo_mcp.tools_write | odoo_mcp.tools_data_quality | odoo_mcp.tools_diagnostics | odoo_mcp.tools_knowledge | odoo_mcp.tools_accounting | odoo_mcp.tools_cross_instance | odoo_mcp.prompts | odoo_mcp.prompts_workflows
     odoo_mcp.server_core
 ignore_imports =
     odoo_mcp.server_core -> odoo_mcp.server

@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Data-quality pack (read-only)** — new tool `data_quality_report` runs
+  evidence-first checks on one model: `duplicates` (server-side read_group on
+  identifier fields), `missing_required`, `orphaned_references` (honest about
+  ACL-hidden targets), `format_anomalies` (email/phone/vat heuristics). Field
+  ACL is the ceiling (denied fields skipped + listed); every issue carries
+  record ids/values; remediation stays behind the gated write workflow.
+  Registered on the async allowlist for large models. New core module
+  `data_quality.py` + surface `tools_data_quality.py`; docs in
+  [docs/data-quality.md](docs/data-quality.md). Tool count 39 → 41.
+- **Migration workbench v1** — new tool `analyze_upgrade_log` classifies Odoo
+  install/update log failures (xpath breaks, missing fields/models/external
+  ids, NOT NULL violations, dependency errors, Odoo 17 attrs removal, ORM
+  signature changes) into an OpenUpgrade-style worklist with per-finding
+  suggestions; input-driven, never contacts Odoo. `scan_addons_source`
+  findings and `upgrade_risk_report` risks now carry the same `action`
+  taxonomy (`no_action` / `needs_review` / `needs_script`) plus an `actions`
+  summary.
+- **Workflow prompt #11** — `pre_migration_data_quality` chains the
+  data-quality pack, `diagnose_access` confirmation, and `analyze_upgrade_log`
+  into a migration gate with human-approved, write-gated remediation batches
+  (prompt count 10 → 11).
 - **Typed per-tool output schemas (read surface)** — the 10 dict-returning
   read tools (`get_odoo_profile`, `schema_catalog`, `health_check`,
   `list_instances`, `list_models`, `get_model_fields`, `search_records`,
