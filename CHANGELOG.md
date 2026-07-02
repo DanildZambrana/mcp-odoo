@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **Agent Skills pack** — `skills/` ships 4 business-workflow skills in the
+  open Agent Skills format (`odoo-data-quality-gate`,
+  `odoo-migration-copilot`, `odoo-month-end-close`,
+  `odoo-agency-fleet-review`): judgment playbooks (evidence rules, pacing,
+  human checkpoints) on top of the MCP tool layer, for Claude Code and other
+  skills-compatible agents. Install by copying into `~/.claude/skills/`.
+
 ## [1.1.0] - 2026-07-02
 
 Community-roadmap release: the server becomes a platform (plugins), the
