@@ -8,6 +8,9 @@ Provides MCP tools and resources for interacting with Odoo ERP systems
 
 # Import core first (creates mcp instance, AppContext, resources)
 from .server_core import (
+    apply_tool_filter,
+    load_plugins,
+    plugin_posture,
     DESTRUCTIVE_TOOL,
     ELICIT_WRITES_ENV,
     N_PLUS_ONE_WARN_THRESHOLD,
@@ -391,6 +394,9 @@ __all__ = [
     "resolve_read_fields",
     "restrict_addons_paths",
     "runtime_security_report",
+    "load_plugins",
+    "apply_tool_filter",
+    "plugin_posture",
     "_cached_fields_metadata",
     "_is_relative_to",
     "_resolve_odoo",
@@ -403,3 +409,15 @@ __all__ = [
     "_execute_approved_write_gated",
     "_write_elicitation_message",
 ]
+
+
+# ---------------------------------------------------------------------------
+# Opt-in third-party plugins + per-deployment tool filtering.
+# Runs after every builtin registration above; both are no-ops without their
+# env vars (ODOO_MCP_PLUGINS, ODOO_MCP_TOOLS_INCLUDE/EXCLUDE).
+# ---------------------------------------------------------------------------
+
+from . import plugin_api as _plugin_api  # noqa: E402 — after tool registration
+
+load_plugins(_plugin_api)
+apply_tool_filter()

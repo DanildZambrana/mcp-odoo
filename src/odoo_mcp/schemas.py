@@ -61,6 +61,9 @@ class HealthCheckResponse(ToolResponse):
         default=None, description="Non-secret runtime security posture."
     )
     rate_limits: Optional[Dict[str, Any]] = None
+    plugins: Optional[Dict[str, Any]] = Field(
+        default=None, description="Opt-in plugin load state and tool filtering."
+    )
 
 
 class ListInstancesResponse(ToolResponse):

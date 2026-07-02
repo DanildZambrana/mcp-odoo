@@ -43,6 +43,7 @@ Once configured (see [Setup](#setup)), ask your agent things like:
 | Background tasks | `submit_async_task` runs long read operations (addon scans, knowledge indexing, AR/AP aging) on a bounded worker pool; poll with `get_async_task` while the agent keeps reasoning. |
 | Local-first knowledge search | `index_knowledge` + `search_knowledge` give BM25 relevance ranking over a bounded record slice — accent-insensitive, in-process, no embeddings service, no data leaving the machine. |
 | Accounting pack | `receivable_payable_aging` and `accounting_health_summary` answer the most common finance questions in one call instead of hand-built domains. |
+| Tool plugins | Ship your own tools as pip packages (`odoo_mcp.tools` entry points) — opt-in via `ODOO_MCP_PLUGINS`, fail-isolated, no fork needed. Trim the surface per deployment with `ODOO_MCP_TOOLS_INCLUDE/EXCLUDE`. See [docs/plugins.md](docs/plugins.md). |
 | Rate limiting | Opt-in sliding-window budget per instance and tool (`ODOO_MCP_RATE_LIMIT_MODE=warn\|block`), surfaced in `health_check`. |
 | Multi-instance | One server, several named Odoo instances — optional `instance` parameter on every tool, `list_instances` discovery, instance-bound approval tokens, per-instance schema caches. |
 | 5 agent prompts | Reusable workflows for failed calls, fit/gap workshops, JSON-2 migration, safe writes, and module audits. |
@@ -244,6 +245,8 @@ Optional environment variables:
 | `ODOO_MCP_AUTH_REQUIRE_AUD` | `0` | Truthy → reject tokens whose introspection response has no `aud` claim (default only checks `aud` when present). |
 | `ODOO_MCP_AUTH_REQUIRE_ISS` | `0` | Truthy → reject introspection responses without an `iss` claim. A present `iss` must always match `ODOO_MCP_AUTH_ISSUER_URL` (mix-up attack hardening). |
 | `ODOO_MCP_AUTH_CACHE_TTL` | `60` | Seconds to cache introspection verdicts (`0` disables). Bounds both AS load and revocation lag. |
+| `ODOO_MCP_PLUGINS` | unset | CSV entry-point names to load as third-party tool plugins (group `odoo_mcp.tools`). Installation alone activates nothing; failures are isolated and reported in `health_check`. See [docs/plugins.md](docs/plugins.md). |
+| `ODOO_MCP_TOOLS_INCLUDE` / `_EXCLUDE` | unset | CSV fnmatch globs trimming the registered tool surface per deployment (small agents drown in 41 tools). Removed names listed in `health_check`. |
 | `ODOO_MCP_INSTRUCTIONS_FILE` | unset | Plain-text file appended to the server-level MCP `instructions` every client receives — deployment-specific guidance (fiscal-year rules, naming conventions) without touching tool descriptions. |
 
 You can also use `odoo_config.json`:

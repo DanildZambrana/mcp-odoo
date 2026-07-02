@@ -572,3 +572,99 @@ def search_records_resource(model_name: str, domain: str) -> str:
         return json.dumps(filtered, indent=2)
     except Exception as e:
         return json.dumps({"error": str(e)}, indent=2)
+
+
+# ---------------------------------------------------------------------------
+# Plugin loading + per-deployment tool filtering (driven from server.py)
+# ---------------------------------------------------------------------------
+
+PLUGIN_STATE: Dict[str, Any] = {
+    "enabled": [],
+    "loaded": [],
+    "failed": {},
+    "tools_filtered": [],
+}
+
+
+def plugin_posture() -> Dict[str, Any]:
+    """Non-secret plugin/filter posture for health_check."""
+    return {
+        "enabled": list(PLUGIN_STATE["enabled"]),
+        "loaded": list(PLUGIN_STATE["loaded"]),
+        "failed": dict(PLUGIN_STATE["failed"]),
+        "tools_filtered": list(PLUGIN_STATE["tools_filtered"]),
+    }
+
+
+def load_plugins(plugin_api: Any) -> None:
+    """Load opt-in third-party tool plugins (entry points ``odoo_mcp.tools``).
+
+    Installation alone never activates code: only names listed in
+    ``ODOO_MCP_PLUGINS`` load, and each plugin is isolated — a raising
+    plugin is recorded in health_check, never fatal. The caller (server.py,
+    top layer) passes the ``odoo_mcp.plugin_api`` module so this bottom
+    layer never imports the surface.
+    """
+    raw = os.environ.get("ODOO_MCP_PLUGINS", "")
+    requested = [name.strip() for name in raw.split(",") if name.strip()]
+    PLUGIN_STATE["enabled"] = requested
+    PLUGIN_STATE["loaded"] = []
+    PLUGIN_STATE["failed"] = {}
+    if not requested:
+        return
+
+    from importlib.metadata import entry_points
+
+    found = {ep.name: ep for ep in entry_points(group="odoo_mcp.tools")}
+
+    for name in requested:
+        entry = found.get(name)
+        if entry is None:
+            PLUGIN_STATE["failed"][name] = (
+                "no installed package exposes odoo_mcp.tools entry point "
+                f"named {name!r}"
+            )
+            continue
+        try:
+            register = entry.load()
+            register(plugin_api)
+            PLUGIN_STATE["loaded"].append(name)
+        except Exception as exc:  # noqa: BLE001 — plugin faults must not kill the server
+            PLUGIN_STATE["failed"][name] = f"{type(exc).__name__}: {exc}"
+
+
+def apply_tool_filter() -> None:
+    """Trim the registered tool surface per deployment.
+
+    ``ODOO_MCP_TOOLS_INCLUDE`` / ``ODOO_MCP_TOOLS_EXCLUDE`` take CSV fnmatch
+    globs (e.g. ``search_*,read_record``). Include (when set) keeps only
+    matching tools; exclude then removes matches. Applies to builtin and
+    plugin tools alike; removed names are listed in health_check.
+    """
+    from fnmatch import fnmatch
+
+    include = [
+        p.strip()
+        for p in os.environ.get("ODOO_MCP_TOOLS_INCLUDE", "").split(",")
+        if p.strip()
+    ]
+    exclude = [
+        p.strip()
+        for p in os.environ.get("ODOO_MCP_TOOLS_EXCLUDE", "").split(",")
+        if p.strip()
+    ]
+    PLUGIN_STATE["tools_filtered"] = []
+    if not include and not exclude:
+        return
+    registry = getattr(mcp._tool_manager, "_tools", None)
+    if not isinstance(registry, dict):  # unexpected SDK shape — do nothing
+        return
+    removed = []
+    for name in list(registry):
+        keep = (not include or any(fnmatch(name, pat) for pat in include)) and (
+            not any(fnmatch(name, pat) for pat in exclude)
+        )
+        if not keep:
+            del registry[name]
+            removed.append(name)
+    PLUGIN_STATE["tools_filtered"] = sorted(removed)

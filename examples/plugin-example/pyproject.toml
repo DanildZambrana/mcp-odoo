@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=77.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "odoo-mcp-plugin-example"
+version = "0.1.0"
+description = "Example third-party tool plugin for odoo-mcp"
+requires-python = ">=3.10"
+dependencies = ["odoo-mcp>=1.0"]
+
+[project.entry-points."odoo_mcp.tools"]
+example = "odoo_mcp_plugin_example.plugin:register"
+
+[tool.setuptools]
+packages = ["odoo_mcp_plugin_example"]

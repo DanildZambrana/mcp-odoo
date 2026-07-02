@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Tool plugins** — third parties can ship odoo-mcp tools as normal pip
+  packages exposing an `odoo_mcp.tools` entry point with a `register(api)`
+  callable; `odoo_mcp.plugin_api` (v1) provides the stable surface (tool
+  decorator, instance resolution, field-ACL redaction, envelopes).
+  **Opt-in only**: nothing loads unless the name is listed in
+  `ODOO_MCP_PLUGINS`; a raising plugin is isolated and reported under
+  `health_check.plugins`. Runnable example in `examples/plugin-example/`;
+  authoring guide + threat model in [docs/plugins.md](docs/plugins.md).
+- **Per-deployment tool filtering** — `ODOO_MCP_TOOLS_INCLUDE` /
+  `ODOO_MCP_TOOLS_EXCLUDE` (CSV fnmatch globs) trim the registered tool
+  surface for token-constrained clients; removed names surface in
+  `health_check.plugins.tools_filtered`.
 - **Data-quality pack (read-only)** — new tool `data_quality_report` runs
   evidence-first checks on one model: `duplicates` (server-side read_group on
   identifier fields), `missing_required`, `orphaned_references` (honest about

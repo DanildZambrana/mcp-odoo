@@ -46,6 +46,7 @@ from .server_core import (
     READ_ONLY_TOOL,
     PREVIEW_TOOL,
     mcp,
+    plugin_posture,
     _cached_fields_metadata,
     _resolve_odoo,
     mcp_surface_counts,
@@ -217,6 +218,7 @@ def health_check() -> HealthCheckResponse:
         },
         "runtime": runtime_security_report(),
         "rate_limits": rate_report(),
+        "plugins": plugin_posture(),
     }
 
 
