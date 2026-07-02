@@ -2,7 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.1.0] - 2026-07-02
+
+Community-roadmap release: the server becomes a platform (plugins), the
+migration wave gets real tooling (data quality + upgrade-log analysis), and
+the MCP surface gets typed. Tool count 39 → 41; prompts 10 → 11; 885 tests.
 
 ### Added
 - **Tool plugins** — third parties can ship odoo-mcp tools as normal pip
