@@ -43,7 +43,7 @@ Once configured (see [Setup](#setup)), ask your agent things like:
 | Background tasks | `submit_async_task` runs long read operations (addon scans, knowledge indexing, AR/AP aging) on a bounded worker pool; poll with `get_async_task` while the agent keeps reasoning. |
 | Local-first knowledge search | `index_knowledge` + `search_knowledge` give BM25 relevance ranking over a bounded record slice — accent-insensitive, in-process, no embeddings service, no data leaving the machine. |
 | Accounting pack | `receivable_payable_aging` and `accounting_health_summary` answer the most common finance questions in one call instead of hand-built domains. |
-| Agent Skills pack | 4 business-workflow skills (data-quality gate, migration copilot, month-end close, agency fleet review) pairing the MCP tool layer with judgment playbooks — the MCP + Skills hybrid. See [skills/](./skills/). |
+| Agent Skills pack | 4 business-workflow skills (data-quality gate, migration copilot, month-end close, agency fleet review) pairing the MCP tool layer with judgment playbooks — `npx skills add tuanle96/mcp-odoo`. See [skills/](./skills/). |
 | Tool plugins | Ship your own tools as pip packages (`odoo_mcp.tools` entry points) — opt-in via `ODOO_MCP_PLUGINS`, fail-isolated, no fork needed. Trim the surface per deployment with `ODOO_MCP_TOOLS_INCLUDE/EXCLUDE`. See [docs/plugins.md](docs/plugins.md). |
 | Rate limiting | Opt-in sliding-window budget per instance and tool (`ODOO_MCP_RATE_LIMIT_MODE=warn\|block`), surfaced in `health_check`. |
 | Multi-instance | One server, several named Odoo instances — optional `instance` parameter on every tool, `list_instances` discovery, instance-bound approval tokens, per-instance schema caches. |

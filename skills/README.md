@@ -18,8 +18,14 @@ other skills-compatible agents.
 
 ## Install
 
-**Claude Code** — copy the skill folders into your project or user skills
-directory:
+One command, any skills-compatible agent (Claude Code, Codex, Gemini CLI,
+GitHub Copilot, OpenCode, Warp, …):
+
+```bash
+npx skills add tuanle96/mcp-odoo
+```
+
+Or manually for Claude Code:
 
 ```bash
 git clone https://github.com/tuanle96/mcp-odoo
@@ -29,9 +35,6 @@ cp -r mcp-odoo/skills/odoo-* ~/.claude/skills/
 Then make sure the odoo-mcp server itself is connected
 (`uvx odoo-mcp --setup` prints the snippet). Invoke naturally ("check data
 quality before our migration") or explicitly (`/odoo-data-quality-gate`).
-
-**Other skills-compatible clients** — point the client's skills directory
-at the same folders; each skill is a self-contained `SKILL.md`.
 
 ## Design rules these skills follow
 
