@@ -45,6 +45,23 @@ quality before our migration") or explicitly (`/odoo-data-quality-gate`).
 - `redacted_fields` and cross-instance opt-outs are policy, never errors
   to work around.
 
+## Companion pack: the developer suite
+
+These four skills are **operator/consultant workflows** — they need nothing
+but Odoo credentials. If you're *developing* on Odoo (custom addons, OWL,
+views, tests, performance) and have shell access to the instance, install
+the companion developer suite — 21 skills built around reading ground truth
+from the running registry (field inventory, MRO/super chains, view wiring,
+runtime traces) before writing any code:
+
+```bash
+npx skills add tuanle96/odoo-ai-skills
+```
+
+The two packs are designed together: [odoo-ai-skills](https://github.com/tuanle96/odoo-ai-skills)
+uses odoo-mcp as its RPC fallback when there's no shell (Odoo Online/SaaS),
+and both route every write through a human gate.
+
 Want a skill for your vertical? They're plain Markdown — PRs welcome
 (see [CONTRIBUTING.md](../CONTRIBUTING.md)), or ship your own alongside a
 [tool plugin](../docs/plugins.md).
