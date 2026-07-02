@@ -4,6 +4,37 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Typed per-tool output schemas (read surface)** — the 10 dict-returning
+  read tools (`get_odoo_profile`, `schema_catalog`, `health_check`,
+  `list_instances`, `list_models`, `get_model_fields`, `search_records`,
+  `read_record`, `read_attachment`, `aggregate_records`) now declare Pydantic
+  response models (new core module `schemas.py`), so `tools/list` advertises
+  real `outputSchema` fields instead of a generic object wrapper. Runtime
+  behavior is unchanged (same envelope, extra keys allowed); MCP responses now
+  include explicit `null`s for unset optional fields. Remaining tool groups
+  are tracked as `good first issue`s.
+- **OAuth hardening (SEP alignment)** — introspection responses carrying an
+  `iss` must match the configured issuer (mix-up attack defense);
+  `ODOO_MCP_AUTH_REQUIRE_ISS=1` rejects responses without `iss`;
+  `ODOO_MCP_AUTH_REQUIRE_AUD=1` rejects tokens without an `aud` claim;
+  introspection verdicts (including rejections) are cached for
+  `ODOO_MCP_AUTH_CACHE_TTL` seconds (default 60, `0` disables) so hot agent
+  loops no longer hammer the authorization server. `health_check` auth
+  posture reports the new flags.
+- **Server-level instructions** — `ODOO_MCP_INSTRUCTIONS_FILE` appends a
+  deployment-specific plain-text briefing to the MCP `instructions` field
+  every client receives (idea: #19, thanks @oadiazp). Unreadable path fails
+  at startup; content capped at 16k chars.
+
+### Changed
+- The deprecated SSE transport now prints a startup warning suggesting
+  `streamable-http`.
+- python-sdk 2.0 (MCP spec 2026-07-28) migration spiked against `mcp==2.0.0b1`
+  and mapped (FastMCP→MCPServer rename, `run()` kwargs, ctor-level
+  `token_verifier`, reshaped elicitation); the dependency pin stays
+  `mcp>=1.27,<2` until the port ships as its own release.
+
 ### Fixed
 - XML-RPC transport: create the `ServerProxy` clients with `allow_none=True` so a
   call whose payload or `fields_get` metadata contains `None` no longer raises

@@ -97,9 +97,39 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
 # MCP instance (shared singleton — re-exported from server.py)
 # ---------------------------------------------------------------------------
 
+DEFAULT_SERVER_INSTRUCTIONS = "MCP Server for interacting with Odoo ERP systems"
+MAX_INSTRUCTIONS_CHARS = 16_000
+
+
+def load_server_instructions() -> str:
+    """Server-level MCP instructions, optionally extended from a file.
+
+    ``ODOO_MCP_INSTRUCTIONS_FILE`` points at a plain-text file whose content
+    is appended to the default instructions and surfaced to every client via
+    the MCP ``instructions`` field — deployment-specific guidance without
+    touching tool descriptions (idea: GH-19, thanks @oadiazp). A set-but-
+    unreadable path fails at startup rather than silently running without
+    the operator's guidance.
+    """
+    path = os.environ.get("ODOO_MCP_INSTRUCTIONS_FILE", "").strip()
+    if not path:
+        return DEFAULT_SERVER_INSTRUCTIONS
+    try:
+        text = Path(path).read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise ValueError(
+            f"ODOO_MCP_INSTRUCTIONS_FILE is set but unreadable: {exc}"
+        ) from exc
+    if not text:
+        return DEFAULT_SERVER_INSTRUCTIONS
+    if len(text) > MAX_INSTRUCTIONS_CHARS:
+        text = text[:MAX_INSTRUCTIONS_CHARS]
+    return f"{DEFAULT_SERVER_INSTRUCTIONS}\n\n{text}"
+
+
 mcp = FastMCP(
     "Odoo MCP Server",
-    instructions="MCP Server for interacting with Odoo ERP systems",
+    instructions=load_server_instructions(),
     dependencies=["requests"],
     lifespan=app_lifespan,
 )

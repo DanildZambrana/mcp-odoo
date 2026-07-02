@@ -167,3 +167,116 @@ def test_configure_oauth_wires_fastmcp_only_for_http(monkeypatch, capsys):
     main_mod.configure_oauth(argparse.Namespace(transport="streamable-http"))
     assert server.mcp.settings.auth is not None
     assert isinstance(server.mcp._token_verifier, auth.IntrospectionTokenVerifier)
+
+
+ISSUER = "https://as.example.com"
+
+
+def _active_payload(**extra):
+    payload = {
+        "active": True,
+        "aud": RESOURCE,
+        "client_id": "agent-1",
+        "exp": int(time.time()) + 600,
+    }
+    payload.update(extra)
+    return payload
+
+
+def test_verify_token_rejects_issuer_mismatch():
+    handler = lambda req: _json_response(_active_payload(iss="https://evil.example.com"))  # noqa: E731
+    token = asyncio.run(
+        _verifier(handler, issuer_url=ISSUER).verify_token("tok-iss-bad")
+    )
+    assert token is None
+
+
+def test_verify_token_accepts_matching_issuer_with_trailing_slash():
+    handler = lambda req: _json_response(_active_payload(iss=ISSUER + "/"))  # noqa: E731
+    token = asyncio.run(
+        _verifier(handler, issuer_url=ISSUER).verify_token("tok-iss-ok")
+    )
+    assert token is not None
+
+
+def test_verify_token_missing_iss_passes_unless_required():
+    handler = lambda req: _json_response(_active_payload())  # noqa: E731
+    assert (
+        asyncio.run(_verifier(handler, issuer_url=ISSUER).verify_token("tok-a"))
+        is not None
+    )
+    assert (
+        asyncio.run(
+            _verifier(handler, issuer_url=ISSUER, require_iss=True).verify_token(
+                "tok-b"
+            )
+        )
+        is None
+    )
+
+
+def test_verify_token_missing_aud_rejected_only_with_require_aud():
+    payload = _active_payload()
+    del payload["aud"]
+    handler = lambda req: _json_response(payload)  # noqa: E731
+    assert asyncio.run(_verifier(handler).verify_token("tok-c")) is not None
+    assert (
+        asyncio.run(_verifier(handler, require_aud=True).verify_token("tok-d")) is None
+    )
+
+
+def test_verify_token_caches_positive_and_negative_verdicts():
+    calls = {"n": 0}
+
+    def handler(request):
+        calls["n"] += 1
+        return _json_response(_active_payload())
+
+    verifier = _verifier(handler, cache_ttl_seconds=60.0)
+    assert asyncio.run(verifier.verify_token("tok-hot")) is not None
+    assert asyncio.run(verifier.verify_token("tok-hot")) is not None
+    assert calls["n"] == 1  # second call served from cache
+
+    rejections = {"n": 0}
+
+    def reject_handler(request):
+        rejections["n"] += 1
+        return _json_response({"active": False})
+
+    neg = _verifier(reject_handler, cache_ttl_seconds=60.0)
+    assert asyncio.run(neg.verify_token("tok-cold")) is None
+    assert asyncio.run(neg.verify_token("tok-cold")) is None
+    assert rejections["n"] == 1  # rejection cached too
+
+
+def test_verify_token_cache_disabled_by_default():
+    calls = {"n": 0}
+
+    def handler(request):
+        calls["n"] += 1
+        return _json_response(_active_payload())
+
+    verifier = _verifier(handler)
+    asyncio.run(verifier.verify_token("tok-x"))
+    asyncio.run(verifier.verify_token("tok-x"))
+    assert calls["n"] == 2
+
+
+def test_build_auth_passes_hardening_env(monkeypatch):
+    monkeypatch.setenv("ODOO_MCP_AUTH_ISSUER_URL", ISSUER)
+    monkeypatch.setenv("ODOO_MCP_AUTH_INTROSPECTION_URL", INTROSPECTION)
+    monkeypatch.setenv("ODOO_MCP_AUTH_RESOURCE_URL", RESOURCE)
+    monkeypatch.setenv("ODOO_MCP_AUTH_REQUIRE_AUD", "1")
+    monkeypatch.setenv("ODOO_MCP_AUTH_REQUIRE_ISS", "true")
+    monkeypatch.setenv("ODOO_MCP_AUTH_CACHE_TTL", "30")
+    built = auth.build_auth()
+    assert built is not None
+    _, verifier = built
+    assert verifier.issuer_url == ISSUER
+    assert verifier.require_aud is True
+    assert verifier.require_iss is True
+    assert verifier._cache is not None
+    posture = auth.auth_posture()
+    assert posture["require_aud"] is True
+    assert posture["require_iss"] is True
+    assert posture["introspection_cache_ttl"] == 30.0

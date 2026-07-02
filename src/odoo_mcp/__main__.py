@@ -225,6 +225,12 @@ def configure_mcp_runtime(args: argparse.Namespace) -> None:
             "Use --allow-remote-http or MCP_ALLOW_REMOTE_HTTP=1 only behind "
             "external authentication, TLS, and network policy."
         )
+    if args.transport == "sse":
+        print(
+            "Warning: the SSE transport is deprecated in the MCP specification; "
+            "prefer streamable-http (or stdio for local clients).",
+            file=sys.stderr,
+        )
     mcp.settings.host = args.host
     mcp.settings.port = args.port
     mcp.settings.log_level = args.log_level

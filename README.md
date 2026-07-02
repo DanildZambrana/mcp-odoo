@@ -240,6 +240,10 @@ Optional environment variables:
 | `ODOO_MCP_AUTH_RESOURCE_URL` | unset | Canonical URL of this MCP server (RFC 8707 audience check when the AS binds tokens). |
 | `ODOO_MCP_AUTH_REQUIRED_SCOPES` | empty | CSV scopes required on every request. |
 | `ODOO_MCP_AUTH_CLIENT_ID` / `_CLIENT_SECRET` | unset | Credentials for the introspection call when the AS requires client auth. |
+| `ODOO_MCP_AUTH_REQUIRE_AUD` | `0` | Truthy → reject tokens whose introspection response has no `aud` claim (default only checks `aud` when present). |
+| `ODOO_MCP_AUTH_REQUIRE_ISS` | `0` | Truthy → reject introspection responses without an `iss` claim. A present `iss` must always match `ODOO_MCP_AUTH_ISSUER_URL` (mix-up attack hardening). |
+| `ODOO_MCP_AUTH_CACHE_TTL` | `60` | Seconds to cache introspection verdicts (`0` disables). Bounds both AS load and revocation lag. |
+| `ODOO_MCP_INSTRUCTIONS_FILE` | unset | Plain-text file appended to the server-level MCP `instructions` every client receives — deployment-specific guidance (fiscal-year rules, naming conventions) without touching tool descriptions. |
 
 You can also use `odoo_config.json`:
 

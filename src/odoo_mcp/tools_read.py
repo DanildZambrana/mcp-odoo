@@ -20,6 +20,18 @@ from .agent_tools import (
 from .field_policy import get_field_policy
 from .odoo_client import list_configured_instances
 from .rate_limit import check_rate, rate_report
+from .schemas import (
+    AggregateRecordsResponse,
+    GetModelFieldsResponse,
+    GetOdooProfileResponse,
+    HealthCheckResponse,
+    ListInstancesResponse,
+    ListModelsResponse,
+    ReadAttachmentResponse,
+    ReadRecordResponse,
+    SchemaCatalogResponse,
+    SearchRecordsResponse,
+)
 from .tool_helpers import (
     EmployeeSearchResult,
     Holiday,
@@ -59,7 +71,7 @@ def get_odoo_profile(
     include_modules: bool = True,
     module_limit: int = 100,
     instance: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> GetOdooProfileResponse:
     """Return server, user-context, transport, and installed-module metadata."""
     try:
         module_limit = clamp_limit(module_limit, maximum=500)
@@ -107,7 +119,7 @@ def schema_catalog(
     refresh: bool = False,
     limit: int = 50,
     instance: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> SchemaCatalogResponse:
     """Return a cached catalog of model names, labels, and optional fields."""
     try:
         limit = clamp_limit(limit, maximum=500)
@@ -192,7 +204,7 @@ def schema_catalog(
     annotations=PREVIEW_TOOL,
     structured_output=True,
 )
-def health_check() -> Dict[str, Any]:
+def health_check() -> HealthCheckResponse:
     """Return local process health and hardening flags without opening Odoo."""
     surface_counts = mcp_surface_counts()
     return {
@@ -213,7 +225,7 @@ def health_check() -> Dict[str, Any]:
     annotations=PREVIEW_TOOL,
     structured_output=True,
 )
-def list_instances() -> Dict[str, Any]:
+def list_instances() -> ListInstancesResponse:
     """List configured Odoo instances (name, url, db, transport) — never credentials."""
     try:
         instances = list_configured_instances()
@@ -244,7 +256,7 @@ def list_models(
     query: Optional[str] = None,
     limit: int = 100,
     instance: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> ListModelsResponse:
     """
     List available Odoo model technical names and display names.
 
@@ -293,7 +305,7 @@ def get_model_fields(
     relevance: Optional[str] = None,
     max_fields: int = DEFAULT_MAX_RELEVANT_FIELDS,
     instance: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> GetModelFieldsResponse:
     """
     Read field definitions for a model.
 
@@ -363,7 +375,7 @@ def search_records(
     order: Optional[str] = None,
     query: Optional[str] = None,
     instance: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> SearchRecordsResponse:
     """
     Search and read records with bounded read-only semantics.
 
@@ -436,7 +448,7 @@ def read_record(
     record_id: int,
     fields: Optional[List[str]] = None,
     instance: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> ReadRecordResponse:
     """
     Read one record by ID with bounded read-only semantics.
 
@@ -489,7 +501,7 @@ def read_attachment(
     attachment_id: int,
     include_data: bool = True,
     instance: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> ReadAttachmentResponse:
     """
     Read one ir.attachment record: metadata always, base64 content when it
     fits under the cap (ODOO_MCP_MAX_ATTACHMENT_BYTES, default 1 MiB).
@@ -586,7 +598,7 @@ def aggregate_records(
     offset: int = 0,
     order: Optional[str] = None,
     instance: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> AggregateRecordsResponse:
     """Group records server-side and aggregate measures.
 
     ``measures`` are ``"field:agg"`` strings (default agg ``sum``).

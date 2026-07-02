@@ -68,3 +68,10 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
+
+# tools_read annotates protocol-level response models (typed MCP outputSchema)
+# while the functions keep returning the plain-dict envelope FastMCP validates
+# at the MCP layer; the runtime dict/model mismatch is deliberate.
+[[tool.mypy.overrides]]
+module = "odoo_mcp.tools_read"
+disable_error_code = ["return-value"]

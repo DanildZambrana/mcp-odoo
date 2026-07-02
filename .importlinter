@@ -20,6 +20,7 @@ source_modules =
     odoo_mcp.cross_instance
     odoo_mcp.audit
     odoo_mcp.auth
+    odoo_mcp.schemas
 forbidden_modules =
     odoo_mcp.server
     odoo_mcp.server_core
