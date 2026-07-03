@@ -32,7 +32,7 @@ project's repository for current details.
 | Diagnostics (failed-call analysis, access root-cause, upgrade risk, fit/gap) | ✅ 7 tools | ❌ CRUD-focused | ❌ | ❌ |
 | OAuth 2.1 resource server on HTTP transport | ✅ RFC 7662/8707/9728 | ❌ | n/a | ❌ |
 | Free-text search helper (`query=` builds the ilike domain for the agent) | ✅ | ❌ | ❌ | ❌ |
-| MCP workflow prompts (end-to-end business processes) | ✅ 10 prompts (invoice approval, PO-to-receipt, customer onboarding, expense review, accounting close, + diagnostics) | ❌ | ❌ | ❌ |
+| MCP workflow prompts (end-to-end business processes) | ✅ 11 prompts (invoice approval, PO-to-receipt, customer onboarding, expense review, month-end close, pre-migration data quality, + diagnostics) | ❌ | ❌ | ❌ |
 | Field-level ACL (read-path, deny/allow per model per instance) | ✅ enforced across all read tools + knowledge index — open-source first | ❌ | Odoo field security only | ❌ |
 | Measured latency — head-to-head vs mcp-server-odoo v0.6.0 (Odoo 19 Docker, XML-RPC, 15 iter) | `search_records` **9.9 ms** p50; `read_record` **9.0 ms**; `list_models` **16.8 ms**; `aggregate_records` 12.8 ms (competitor faster at 9.4 ms — noted honestly). See [docs/benchmarks.md](./benchmarks.md). | `search_records` 22.4 ms; `read_record` 10.9 ms; `list_models` 19.6 ms; `aggregate_records` 9.4 ms. Standard mode requires companion Odoo module ([#68](https://github.com/ivnvxd/mcp-server-odoo/issues/68) ~12 s/call regression in Claude Desktop; [#70](https://github.com/ivnvxd/mcp-server-odoo/issues/70) session drop on streamable-http). | n/a | n/a |
 | Release testing against real Odoo | ✅ Docker smoke on Odoo 16/17/18/19 each release | mock-based | n/a | unknown |
