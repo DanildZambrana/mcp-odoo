@@ -3,14 +3,17 @@
 Opt-in: set the ODOO_MCP_AUTH_* environment variables and start an HTTP
 transport. The server then advertises RFC 9728 protected-resource metadata
 and rejects requests without a valid bearer token. Tokens are validated
-against the authorization server's RFC 7662 introspection endpoint —
-works with Keycloak, Auth0, Authentik, and any AS that supports
-introspection. stdio transport is unaffected.
+against the authorization server's RFC 7662 introspection endpoint, or
+locally as JWTs using JWKS (RFC 7517).
 
 Env vars:
 - ODOO_MCP_AUTH_ISSUER_URL          authorization server issuer (required)
-- ODOO_MCP_AUTH_INTROSPECTION_URL   RFC 7662 endpoint (required)
 - ODOO_MCP_AUTH_RESOURCE_URL        canonical URL of this MCP server (required)
+- ODOO_MCP_AUTH_INTROSPECTION_URL   RFC 7662 endpoint (optional; use for
+                                    opaque tokens or centralized validation)
+- ODOO_MCP_AUTH_JWKS_URL            explicit JWKS URL (optional; if omitted
+                                    and INTROSPECTION_URL is absent, it is
+                                    auto-discovered from the issuer)
 - ODOO_MCP_AUTH_REQUIRED_SCOPES     comma-separated scopes (optional)
 - ODOO_MCP_AUTH_CLIENT_ID/SECRET    client credentials for the
                                     introspection call (optional; many AS
@@ -34,6 +37,7 @@ import time
 from typing import Any
 
 import httpx
+import jwt
 from mcp.server.auth.provider import AccessToken, TokenVerifier
 from mcp.server.auth.settings import AuthSettings
 from pydantic import AnyHttpUrl
@@ -56,10 +60,12 @@ def auth_required_scopes() -> list[str]:
 
 
 def auth_configured() -> bool:
-    """True when the three mandatory auth env vars are all present."""
-    return all(
-        _env(name) for name in ("ISSUER_URL", "INTROSPECTION_URL", "RESOURCE_URL")
-    )
+    """True when the mandatory auth env vars are present."""
+    # Mandatory for any OAuth mode: Issuer and Resource URL.
+    if not (_env("ISSUER_URL") and _env("RESOURCE_URL")):
+        return False
+    # Then we need either introspection or some way to get keys (JWKS or auto).
+    return any(_env(name) for name in ("INTROSPECTION_URL", "JWKS_URL", "ISSUER_URL"))
 
 
 def _env_flag(name: str) -> bool:
@@ -84,6 +90,7 @@ def auth_posture() -> dict[str, Any]:
         "resource_url": _env("RESOURCE_URL"),
         "required_scopes": auth_required_scopes(),
         "introspection_configured": _env("INTROSPECTION_URL") is not None,
+        "jwks_configured": _env("JWKS_URL") is not None,
         "require_aud": _env_flag("REQUIRE_AUD"),
         "require_iss": _env_flag("REQUIRE_ISS"),
         "introspection_cache_ttl": _cache_ttl(),
@@ -215,38 +222,171 @@ class IntrospectionTokenVerifier(TokenVerifier):
         )
 
 
-def build_auth() -> tuple[AuthSettings, IntrospectionTokenVerifier] | None:
+class JWTTokenVerifier(TokenVerifier):
+    """Validate bearer tokens locally as JWTs using JWKS keys."""
+
+    def __init__(
+        self,
+        *,
+        resource_url: str,
+        issuer_url: str,
+        jwks_url: str | None = None,
+        require_aud: bool = False,
+        require_iss: bool = False,
+        timeout_seconds: float = 10.0,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
+        self.resource_url = resource_url
+        self.issuer_url = issuer_url
+        self.jwks_url = jwks_url
+        self.require_aud = require_aud
+        self.require_iss = require_iss
+        self.timeout_seconds = timeout_seconds
+        self._transport = transport
+        self._jwks: dict[str, Any] | None = None
+        self._jwks_fetched_at: float = 0
+        self._jwks_ttl = 86400  # 24h
+
+    async def _get_jwks(self) -> dict[str, Any]:
+        now = time.time()
+        if self._jwks and (now - self._jwks_fetched_at < self._jwks_ttl):
+            return self._jwks
+
+        target_url = self.jwks_url
+        if not target_url:
+            # Auto-discover from OpenID configuration
+            config_url = (
+                f"{self.issuer_url.rstrip('/')}/.well-known/openid-configuration"
+            )
+            try:
+                async with httpx.AsyncClient(
+                    timeout=self.timeout_seconds, transport=self._transport
+                ) as client:
+                    resp = await client.get(config_url)
+                    resp.raise_for_status()
+                    target_url = resp.json()["jwks_uri"]
+            except Exception as exc:
+                logger.error("Failed to discover JWKS URL from %s: %s", config_url, exc)
+                raise ValueError(f"JWKS discovery failed: {exc}")
+
+        try:
+            async with httpx.AsyncClient(
+                timeout=self.timeout_seconds, transport=self._transport
+            ) as client:
+                resp = await client.get(target_url)
+                resp.raise_for_status()
+                self._jwks = resp.json()
+                self._jwks_fetched_at = now
+                return self._jwks
+        except Exception as exc:
+            logger.error("Failed to fetch JWKS from %s: %s", target_url, exc)
+            raise ValueError(f"JWKS fetch failed: {exc}")
+
+    async def verify_token(self, token: str) -> AccessToken | None:
+        try:
+            # First pass: get the header to find the kid
+            header = jwt.get_unverified_header(token)
+            kid = header.get("kid")
+
+            jwks = await self._get_jwks()
+            signing_key = None
+            for key in jwks.get("keys", []):
+                if key.get("kid") == kid:
+                    signing_key = jwt.algorithms.RSAAlgorithm.from_jwk(key)
+                    break
+
+            if not signing_key and kid:
+                # Refresh keys and try again once
+                self._jwks = None
+                jwks = await self._get_jwks()
+                for key in jwks.get("keys", []):
+                    if key.get("kid") == kid:
+                        signing_key = jwt.algorithms.RSAAlgorithm.from_jwk(key)
+                        break
+
+            if not signing_key:
+                logger.warning("No matching JWK found for kid %s", kid)
+                return None
+
+            # Validate the token
+            payload = jwt.decode(
+                token,
+                signing_key,
+                algorithms=["RS256"],
+                audience=self.resource_url if self.require_aud else None,
+                issuer=self.issuer_url if self.require_iss else None,
+                options={
+                    "verify_aud": self.require_aud,
+                    "verify_iss": self.require_iss,
+                },
+            )
+
+            expires_at = payload.get("exp")
+            scope_raw = payload.get("scope", "")
+            scopes = scope_raw.split() if isinstance(scope_raw, str) else []
+
+            return AccessToken(
+                token=token,
+                client_id=str(payload.get("client_id") or payload.get("sub") or "unknown"),
+                scopes=scopes,
+                expires_at=int(expires_at) if expires_at else None,
+                resource=self.resource_url,
+            )
+        except jwt.PyJWTError as exc:
+            logger.warning("JWT validation failed: %s", exc)
+            return None
+        except Exception as exc:
+            logger.error("Unexpected error during JWT validation: %s", exc)
+            return None
+
+
+def build_auth() -> tuple[AuthSettings, TokenVerifier] | None:
     """Build (AuthSettings, verifier) from env, or None when not configured."""
     if not auth_configured():
         partial = [
             name
-            for name in ("ISSUER_URL", "INTROSPECTION_URL", "RESOURCE_URL")
+            for name in ("ISSUER_URL", "RESOURCE_URL")
             if _env(name)
         ]
         if partial:
             raise ValueError(
-                "Incomplete OAuth configuration: set ODOO_MCP_AUTH_ISSUER_URL, "
-                "ODOO_MCP_AUTH_INTROSPECTION_URL, and ODOO_MCP_AUTH_RESOURCE_URL "
-                f"together (found only {', '.join(partial)})."
+                "Incomplete OAuth configuration: set ODOO_MCP_AUTH_ISSUER_URL "
+                "and ODOO_MCP_AUTH_RESOURCE_URL together."
             )
         return None
+
     issuer = _env("ISSUER_URL")
-    introspection = _env("INTROSPECTION_URL")
     resource = _env("RESOURCE_URL")
-    assert issuer and introspection and resource
+    introspection = _env("INTROSPECTION_URL")
+    jwks = _env("JWKS_URL")
+
+    assert issuer and resource
     settings = AuthSettings(
         issuer_url=AnyHttpUrl(issuer),
         resource_server_url=AnyHttpUrl(resource),
         required_scopes=auth_required_scopes() or None,
     )
-    verifier = IntrospectionTokenVerifier(
-        introspection,
-        resource_url=resource,
-        issuer_url=issuer,
-        client_id=_env("CLIENT_ID"),
-        client_secret=_env("CLIENT_SECRET"),
-        require_aud=_env_flag("REQUIRE_AUD"),
-        require_iss=_env_flag("REQUIRE_ISS"),
-        cache_ttl_seconds=_cache_ttl(),
-    )
+
+    verifier: TokenVerifier
+    if introspection:
+        verifier = IntrospectionTokenVerifier(
+            introspection,
+            resource_url=resource,
+            issuer_url=issuer,
+            client_id=_env("CLIENT_ID"),
+            client_secret=_env("CLIENT_SECRET"),
+            require_aud=_env_flag("REQUIRE_AUD"),
+            require_iss=_env_flag("REQUIRE_ISS"),
+            cache_ttl_seconds=_cache_ttl(),
+        )
+    else:
+        # Default to JWT validation when introspection is not configured
+        verifier = JWTTokenVerifier(
+            resource_url=resource,
+            issuer_url=issuer,
+            jwks_url=jwks,
+            require_aud=_env_flag("REQUIRE_AUD"),
+            require_iss=_env_flag("REQUIRE_ISS"),
+        )
+
     return settings, verifier

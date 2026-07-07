@@ -242,7 +242,8 @@ Optional environment variables:
 | `ODOO_MCP_ATTACHMENT_UPLOAD_ROOTS` | unset | Colon-separated local directories `validate_write` may read `<field>_from_path` uploads from (mirrors `ODOO_ADDONS_PATHS`). Required — fails closed with no roots configured. |
 | `ODOO_MCP_MAX_ATTACHMENT_UPLOAD_BYTES` | `10485760` | Size cap for `<field>_from_path` local-file uploads (hard cap 16 MiB). |
 | `ODOO_MCP_AUTH_ISSUER_URL` | unset | OAuth 2.1: authorization server issuer. With the two vars below, the HTTP transport becomes a protected resource server (RFC 9728 metadata + bearer validation). |
-| `ODOO_MCP_AUTH_INTROSPECTION_URL` | unset | RFC 7662 token introspection endpoint of the authorization server. |
+| `ODOO_MCP_AUTH_INTROSPECTION_URL` | unset | RFC 7662 token introspection endpoint. If omitted, the server defaults to local JWT validation using JWKS. |
+| `ODOO_MCP_AUTH_JWKS_URL` | unset | Optional: explicit URL for the JSON Web Key Set. If omitted and using JWT validation, it is auto-discovered from the issuer's OpenID configuration. |
 | `ODOO_MCP_AUTH_RESOURCE_URL` | unset | Canonical URL of this MCP server (RFC 8707 audience check when the AS binds tokens). |
 | `ODOO_MCP_AUTH_REQUIRED_SCOPES` | empty | CSV scopes required on every request. |
 | `ODOO_MCP_AUTH_CLIENT_ID` / `_CLIENT_SECRET` | unset | Credentials for the introspection call when the AS requires client auth. |

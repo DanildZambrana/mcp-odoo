@@ -23,6 +23,7 @@ authors = [
 dependencies = [
     "mcp>=1.27,<2",
     "requests>=2.31.0",
+    "PyJWT[crypto]>=2.8.0",
 ]
 
 [project.urls]
