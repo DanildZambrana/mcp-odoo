@@ -254,8 +254,38 @@ def write_approval_payload(approval: Dict[str, Any]) -> Dict[str, Any]:
     return payload
 
 
-def register_write_approval(app_context: AppContext, report: Dict[str, Any]) -> bool:
-    """Persist validated write approvals inside the current server lifespan."""
+def _sweep_expired_write_approvals(app_context: AppContext, now: float) -> None:
+    """Evict expired write-approval records so their contents stop lingering.
+
+    An approval a caller validates but never executes otherwise sits in
+    ``app_context.write_approvals`` until *that exact token* is looked up
+    again after expiry (``require_validated_write_approval`` only evicts on
+    access). That is especially costly for ``*_from_path`` uploads, whose
+    ``resolved_binary_values`` hold a full file's base64 content server-side
+    (see ``register_write_approval``) — abandoned approvals would otherwise
+    keep that content in memory indefinitely.
+    """
+    expired_tokens = [
+        token
+        for token, record in app_context.write_approvals.items()
+        if now > float(record.get("expires_at", 0))
+    ]
+    for token in expired_tokens:
+        app_context.write_approvals.pop(token, None)
+
+
+def register_write_approval(
+    app_context: AppContext,
+    report: Dict[str, Any],
+    resolved_binary_values: Optional[Dict[str, str]] = None,
+) -> bool:
+    """Persist validated write approvals inside the current server lifespan.
+
+    ``resolved_binary_values`` (field name -> real base64), when given, is
+    stored only in this server-side record — never in ``report["approval"]``,
+    which is what gets echoed back to the caller and hashed into the approval
+    token. See ``_resolve_binary_from_path_fields`` in ``tools_write.py``.
+    """
     approval = report.get("approval")
     if not report.get("success") or not isinstance(approval, dict):
         return False
@@ -263,12 +293,16 @@ def register_write_approval(app_context: AppContext, report: Dict[str, Any]) -> 
     if not token:
         return False
     now = time.time()
-    app_context.write_approvals[token] = {
+    _sweep_expired_write_approvals(app_context, now)
+    record: Dict[str, Any] = {
         "approval": dict(approval),
         "payload": write_approval_payload(approval),
         "validated_at": now,
         "expires_at": now + WRITE_APPROVAL_TTL_SECONDS,
     }
+    if resolved_binary_values:
+        record["resolved_binary_values"] = dict(resolved_binary_values)
+    app_context.write_approvals[token] = record
     approval["validated_at"] = now
     approval["expires_at"] = now + WRITE_APPROVAL_TTL_SECONDS
     return True
@@ -331,6 +365,46 @@ def restrict_addons_paths(addons_paths: Optional[List[str]]) -> Optional[List[st
             )
         restricted_paths.append(str(candidate))
     return restricted_paths
+
+
+# ---------------------------------------------------------------------------
+# Attachment upload path helpers
+# ---------------------------------------------------------------------------
+
+
+def configured_attachment_upload_roots() -> List[Path]:
+    """Return trusted local roots operators allow ``*_from_path`` uploads from."""
+    roots: List[Path] = []
+    for raw_path in os.environ.get("ODOO_MCP_ATTACHMENT_UPLOAD_ROOTS", "").split(
+        os.pathsep
+    ):
+        if not raw_path:
+            continue
+        roots.append(Path(raw_path).expanduser().resolve(strict=False))
+    return roots
+
+
+def restrict_attachment_upload_path(raw_path: str) -> Path:
+    """Resolve and confine a ``*_from_path`` value to configured upload roots.
+
+    Fails closed: ``ODOO_MCP_ATTACHMENT_UPLOAD_ROOTS`` must be set, and the
+    resolved path must sit inside one of its roots. Without this, a
+    prompt-injected agent could read and exfiltrate arbitrary local files
+    (SSH keys, other clients' data, ...) as an Odoo attachment — mirrors
+    ``restrict_addons_paths`` above.
+    """
+    roots = configured_attachment_upload_roots()
+    if not roots:
+        raise ValueError(
+            "*_from_path uploads require ODOO_MCP_ATTACHMENT_UPLOAD_ROOTS to be "
+            "set to one or more trusted local directories."
+        )
+    candidate = Path(raw_path).expanduser().resolve(strict=False)
+    if not any(candidate == root or _is_relative_to(candidate, root) for root in roots):
+        raise ValueError(
+            f"{candidate} is outside configured ODOO_MCP_ATTACHMENT_UPLOAD_ROOTS."
+        )
+    return candidate
 
 
 # ---------------------------------------------------------------------------

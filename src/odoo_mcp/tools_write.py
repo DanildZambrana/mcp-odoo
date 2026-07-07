@@ -5,7 +5,12 @@ Includes: preview_write, validate_write, execute_approved_write,
 chatter_post, execute_method + WriteConfirmation + elicitation logic.
 """
 
+import base64
+import hashlib
 import json
+import os
+import stat
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from mcp.server.fastmcp import Context
@@ -19,6 +24,7 @@ from .agent_tools import (
 from .audit import record_write_event
 from .diagnostics import DESTRUCTIVE_METHODS, classify_method_safety
 from .tool_helpers import (
+    max_attachment_upload_bytes,
     normalize_domain_input,
     truthy_env,
     validate_method_name,
@@ -37,8 +43,72 @@ from .server_core import (
     _resolve_odoo,
     register_write_approval,
     require_validated_write_approval,
+    restrict_attachment_upload_path,
     write_approval_payload,
 )
+
+_FROM_PATH_SUFFIX = "_from_path"
+
+
+def _read_attachment_source_file(path: Path, cap: int) -> bytes:
+    """Open, size-check, and read ``path`` through a single file descriptor.
+
+    ``restrict_attachment_upload_path`` only proves the path was inside a
+    trusted root *at resolve time*. A writable upload root still leaves a
+    TOCTOU window between that check and the read: the entry on disk could
+    be swapped for a symlink pointing outside the root before we get to it.
+    Opening once with ``O_NOFOLLOW`` (refuses a symlink as the final path
+    component) and deriving both the size cap and the hash from the bytes
+    read through that same fd closes the gap — the size/hash checked are
+    always the bytes actually returned, not a stale ``stat()`` from an
+    earlier, possibly-swapped file.
+    """
+    try:
+        fd = os.open(str(path), os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    except OSError as exc:
+        raise ValueError(f"{path} does not exist or is not a regular file") from exc
+    with os.fdopen(fd, "rb") as handle:
+        file_stat = os.fstat(handle.fileno())
+        if not stat.S_ISREG(file_stat.st_mode):
+            raise ValueError(f"{path} does not exist or is not a regular file")
+        if file_stat.st_size > cap:
+            raise ValueError(
+                f"{path} is {file_stat.st_size} bytes; cap is {cap} "
+                "(raise ODOO_MCP_MAX_ATTACHMENT_UPLOAD_BYTES to allow it)"
+            )
+        return handle.read()
+
+
+def _resolve_binary_from_path_fields(
+    values: Dict[str, Any],
+) -> tuple[Dict[str, Any], Dict[str, str]]:
+    """Replace ``<field>_from_path`` entries with a content fingerprint.
+
+    Lets a caller attach a local file (e.g. a resume) to an Odoo binary field
+    without ever putting the base64 content in a tool call — the content
+    would otherwise have to pass through the calling agent's context, which
+    does not scale past a few hundred KB.
+
+    Returns ``(values, real_base64_by_field)``. The returned ``values`` dict
+    only ever holds a ``sha256:<hex>:<byte length>`` fingerprint for each
+    resolved field — safe to hash into the approval token, store, and echo
+    back to the caller. The real base64 is returned separately so it can be
+    stored server-side only (see ``register_write_approval``) and substituted
+    back in at execution time (see ``_execute_approved_write_gated``).
+    """
+    values = dict(values)
+    resolved: Dict[str, str] = {}
+    for key in [k for k in values if k.endswith(_FROM_PATH_SUFFIX)]:
+        real_field = key[: -len(_FROM_PATH_SUFFIX)]
+        if real_field in values:
+            raise ValueError(f"pass either {real_field!r} or {key!r}, not both")
+        raw_path = values.pop(key)
+        path = restrict_attachment_upload_path(str(raw_path))
+        data = _read_attachment_source_file(path, max_attachment_upload_bytes())
+        digest = hashlib.sha256(data).hexdigest()
+        values[real_field] = f"sha256:{digest}:{len(data)}"
+        resolved[real_field] = base64.b64encode(data).decode("ascii")
+    return values, resolved
 
 
 def _srv() -> Any:
@@ -160,6 +230,21 @@ def validate_write(
     try:
         validate_model_name(model)
         instance_name = _srv().resolve_instance_name(instance)
+
+        resolved_binary_values: Dict[str, Any] = {}
+        if values:
+            values, resolved_binary_values = _resolve_binary_from_path_fields(values)
+        if resolved_binary_values and (fields_metadata is not None or not use_live_metadata):
+            return {
+                "success": False,
+                "tool": "validate_write",
+                "error": (
+                    "*_from_path uploads require validation against trusted live "
+                    "Odoo metadata; call with use_live_metadata=True (the default) "
+                    "and no explicit fields_metadata."
+                ),
+            }
+
         metadata_source = "input" if fields_metadata is not None else "none"
         if fields_metadata is None and use_live_metadata:
             metadata_source = "server"
@@ -202,7 +287,9 @@ def validate_write(
         )
         if trusted_live_metadata:
             stored = register_write_approval(
-                ctx.request_context.lifespan_context, report
+                ctx.request_context.lifespan_context,
+                report,
+                resolved_binary_values=resolved_binary_values or None,
             )
             report["approval_status"] = {
                 "stored": stored,
@@ -345,6 +432,13 @@ def _execute_approved_write_gated(
             raise ValueError("operation must be one of create, write, or unlink")
 
         values = dict(approval.get("values") or {})
+        resolved_binary_values = validation_record.get("resolved_binary_values") or {}
+        for field_name, real_base64 in resolved_binary_values.items():
+            # The client only ever held a sha256 fingerprint for these fields
+            # (see _resolve_binary_from_path_fields) — swap in the real base64
+            # that the server read from disk at validate_write time.
+            if field_name in values:
+                values[field_name] = real_base64
         values_list = approval.get("values_list")
         record_ids = [int(record_id) for record_id in approval.get("record_ids") or []]
         context = dict(approval.get("context") or {})
